@@ -65,4 +65,3 @@ const Title = styled.h1`
 const Message = styled.p`
   font-size: 18px;
 `;
-
