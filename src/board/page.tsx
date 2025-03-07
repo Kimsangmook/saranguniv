@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import styled from "styled-components";
 import { QRCodeCanvas } from "qrcode.react"; // ✅ 여기 수정!
 

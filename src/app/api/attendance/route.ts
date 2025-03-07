@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     }
 
     // ✅ 토큰 검증 및 파싱
-    const decoded: any = jwt.verify(token, SECRET_KEY);
+    const decoded = jwt.verify(token, SECRET_KEY) as { name: string; contact: string };
 
     if (!decoded.name || !decoded.contact) {
       return NextResponse.json({ error: "잘못된 토큰입니다." }, { status: 400 });
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ message: "출석이 완료되었습니다.", attendance });
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: "출석 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
