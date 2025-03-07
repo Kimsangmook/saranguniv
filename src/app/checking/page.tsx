@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styled from "styled-components";
 
@@ -8,12 +8,16 @@ export default function Checking() {
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; contact: string } | null>(null);
   const [message, setMessage] = useState("");
+  const hasFetched = useRef(false); // ✅ 중복 요청 방지용 useRef
 
   useEffect(() => {
+    if (hasFetched.current) return; // ✅ 이미 요청했다면 실행하지 않음
+    hasFetched.current = true; // ✅ 첫 실행 이후에는 다시 실행되지 않도록 설정
+
     const token = localStorage.getItem("attendance_token");
 
     if (!token) {
-      router.replace("/"); // ✅ 토큰 없으면 렌딩 페이지로 이동
+      router.replace("/");
       return;
     }
 
@@ -29,7 +33,7 @@ export default function Checking() {
         setUser({ name: data.attendance.name, contact: data.attendance.contact });
         setMessage(data.message);
       } else {
-        localStorage.removeItem("attendance_token"); // ✅ 토큰 삭제
+        localStorage.removeItem("attendance_token");
         router.replace("/");
       }
     };
@@ -60,8 +64,10 @@ const Container = styled.div`
 const Title = styled.h1`
   font-size: 24px;
   margin-bottom: 20px;
+  color: black;
 `;
 
 const Message = styled.p`
   font-size: 18px;
+  color: black;
 `;
