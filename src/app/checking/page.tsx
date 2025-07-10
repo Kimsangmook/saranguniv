@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import styled from "styled-components";
 
 export default function Checking() {
   const router = useRouter();
@@ -44,30 +43,11 @@ export default function Checking() {
   if (!user) return <p>로딩 중...</p>;
 
   return (
-    <Container>
-      <Title>{message}</Title>
-      <Message>{user.name}님, 출석이 완료되었습니다.</Message>
-    </Container>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="text-2xl mb-5 text-black">{message}</h1>
+      <p className="text-lg text-black">{user.name}님, 출석이 완료되었습니다.</p>
+    </div>
   );
 }
 
-// ✅ styled-components 적용
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-color: #f8f9fa;
-`;
-
-const Title = styled.h1`
-  font-size: 24px;
-  margin-bottom: 20px;
-  color: black;
-`;
-
-const Message = styled.p`
-  font-size: 18px;
-  color: black;
-`;
+// 이전 styled-components 정의는 제거되었습니다.

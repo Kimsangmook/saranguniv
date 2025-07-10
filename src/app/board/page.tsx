@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import styled from "styled-components";
 import { QRCodeCanvas } from "qrcode.react"; // ✅ 여기 수정!
 
 export default function Board() {
@@ -14,32 +13,12 @@ export default function Board() {
   }, []);
 
   return (
-    <Container>
-      <Title>QR 코드 스캔 후 출석 체크</Title>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="text-2xl mb-5 text-black">QR 코드 스캔 후 출석 체크</h1>
       {url && <QRCodeCanvas value={url} size={200} />}
-      <InfoText>QR 코드를 스캔하면 출석 페이지로 이동합니다.</InfoText>
-    </Container>
+      <p className="text-base mt-3 text-gray-500">QR 코드를 스캔하면 출석 페이지로 이동합니다.</p>
+    </div>
   );
 }
 
-// ✅ styled-components 적용
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-color: #f8f9fa;
-`;
-
-const Title = styled.h1`
-  font-size: 24px;
-  margin-bottom: 20px;
-  color:black;
-`;
-
-const InfoText = styled.p`
-  font-size: 16px;
-  margin-top: 10px;
-  color: #555;
-`;
+// 이전 styled-components 정의는 제거되었습니다.
