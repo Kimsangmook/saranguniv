@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import styled from "styled-components";
 
 export default function Home() {
   const router = useRouter();
@@ -43,74 +42,34 @@ export default function Home() {
   };
 
   return (
-    <Container>
-      <Title>출석 체크</Title>
-      <Form onSubmit={handleSubmit}>
-        <Input
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="text-2xl mb-5 text-black">출석 체크</h1>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-72">
+        <input
           type="text"
           placeholder="이름 입력"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          className="p-2 text-base border border-gray-300 rounded"
         />
-        <Input
+        <input
           type="text"
           placeholder="연락처 입력"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
+          className="p-2 text-base border border-gray-300 rounded"
         />
-        <Button type="submit">출석하기</Button>
-      </Form>
-      {error && <ErrorText>{error}</ErrorText>}
-    </Container>
+        <button
+          type="submit"
+          className="p-2 text-base bg-blue-600 text-white rounded hover:bg-blue-500"
+        >
+          출석하기
+        </button>
+      </form>
+      {error && <p className="text-red-500 mt-3">{error}</p>}
+    </div>
   );
 }
 
-// ✅ styled-components 적용
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-color: #f8f9fa;
-`;
-
-const Title = styled.h1`
-  font-size: 24px;
-  margin-bottom: 20px;
-  color: black;
-`;
-
-const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 300px;
-`;
-
-const Input = styled.input`
-  padding: 10px;
-  font-size: 16px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-`;
-
-const Button = styled.button`
-  padding: 10px;
-  font-size: 16px;
-  background: #0070f3;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-
-  &:hover {
-    background: #005ecb;
-  }
-`;
-
-const ErrorText = styled.p`
-  color: red;
-  margin-top: 10px;
-`;
+// 이전 styled-components 정의는 제거되었습니다.
 
