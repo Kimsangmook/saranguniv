@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Sidebar from "@/components/Sidebar";
+import { API_ENDPOINTS } from "@/lib/constants";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Menu, Users, Calendar } from "lucide-react";
 
 interface Attendance {
   id: string;
@@ -15,6 +21,7 @@ export default function CMS() {
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetchAttendances();
@@ -22,7 +29,7 @@ export default function CMS() {
 
   const fetchAttendances = async () => {
     try {
-      const response = await fetch("/api/attendance", {
+      const response = await fetch(API_ENDPOINTS.ATTENDANCE, {
         method: "GET",
       });
 
@@ -39,99 +46,156 @@ export default function CMS() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("attendance_token");
-    router.push("/token");
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <p className="text-lg">로딩 중...</p>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex items-center space-x-2">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          <p className="text-lg text-muted-foreground">로딩 중...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">출석 관리 시스템</h1>
-          <div className="flex gap-4">
-            <button
-              onClick={() => router.push("/token")}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
-            >
-              출석 페이지로
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-500"
-            >
-              로그아웃
-            </button>
+    <div className="flex h-screen bg-background">
+      {/* 사이드바 */}
+      <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+      
+      {/* 메인 콘텐츠 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 상단 헤더 */}
+        <header className="bg-card shadow-sm border-b">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                className="md:hidden mr-2"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <h1 className="text-xl font-semibold">대시보드</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <Users className="h-4 w-4" />
+                <span>총 {attendances.length}명 출석</span>
+              </div>
+            </div>
           </div>
-        </div>
+        </header>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
+        {/* 메인 콘텐츠 영역 */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {error && (
+            <Card className="border-destructive">
+              <CardContent className="pt-6">
+                <p className="text-destructive">{error}</p>
+              </CardContent>
+            </Card>
+          )}
 
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800">출석 현황</h2>
-            <p className="text-gray-600 mt-1">총 {attendances.length}명이 출석했습니다.</p>
+          {/* 통계 카드들 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">총 출석자</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{attendances.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  명이 출석했습니다
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">오늘 출석자</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {attendances.filter(attendance => {
+                    const today = new Date().toDateString();
+                    const attendanceDate = new Date(attendance.createdAt).toDateString();
+                    return today === attendanceDate;
+                  }).length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  오늘 출석한 사람
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">최근 출석</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {attendances.length > 0 ? 
+                    new Date(attendances[0].createdAt).toLocaleDateString('ko-KR') : 
+                    '없음'
+                  }
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  가장 최근 출석일
+                </p>
+              </CardContent>
+            </Card>
           </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    번호
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    이름
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    연락처
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    출석 시간
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {attendances.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
-                      아직 출석한 사람이 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  attendances.map((attendance, index) => (
-                    <tr key={attendance.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {index + 1}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {attendance.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {attendance.contact}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(attendance.createdAt).toLocaleString('ko-KR')}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+
+          {/* 출석 현황 테이블 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>출석 현황</CardTitle>
+              <CardDescription>
+                총 {attendances.length}명이 출석했습니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>번호</TableHead>
+                    <TableHead>이름</TableHead>
+                    <TableHead>연락처</TableHead>
+                    <TableHead>출석 시간</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attendances.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        아직 출석한 사람이 없습니다.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    attendances.map((attendance, index) => (
+                      <TableRow key={attendance.id}>
+                        <TableCell className="font-medium">{index + 1}</TableCell>
+                        <TableCell>{attendance.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{attendance.contact}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(attendance.createdAt).toLocaleString('ko-KR')}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </main>
       </div>
     </div>
   );
