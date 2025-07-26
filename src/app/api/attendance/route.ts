@@ -5,6 +5,22 @@ import jwt from "jsonwebtoken";
 const prisma = new PrismaClient();
 const SECRET_KEY = process.env.JWT_SECRET || "default-secret-key";
 
+export async function GET() {
+  try {
+    // ✅ 모든 출석 데이터 조회
+    const attendances = await prisma.attendance.findMany({
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return NextResponse.json({ attendances });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "출석 데이터 조회 중 오류가 발생했습니다." }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { token } = await req.json();

@@ -16,7 +16,7 @@ export default function Checking() {
     const token = localStorage.getItem("attendance_token");
 
     if (!token) {
-      router.replace("/");
+      router.replace("/token");
       return;
     }
 
@@ -33,7 +33,7 @@ export default function Checking() {
         setMessage(data.message);
       } else {
         localStorage.removeItem("attendance_token");
-        router.replace("/");
+        router.replace("/token");
       }
     };
 
