@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,9 +7,224 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Attendance {
-  id        String   @id @default(uuid())
-  name      String
-  contact   String
-  createdAt DateTime @default(now())
+enum AdminRole {
+  ADMIN
+  ATTENDANCE_MANAGER
+}
+
+enum MemberStatus {
+  ACTIVE
+  MILITARY
+  INTERCESSION
+  RESTING
+  GRADUATED
+  WITHDRAWN
+}
+
+enum MeetingType {
+  SATURDAY
+  SUNDAY
+}
+
+enum AttendanceStatus {
+  LATE
+  ABSENT
+}
+
+enum RecordMethod {
+  QR
+  ADMIN_MANUAL
+}
+
+enum RecordSettlementStatus {
+  UNSETTLED
+  REQUESTED
+  COMPLETED
+}
+
+enum ExcuseType {
+  LATE
+  ABSENT
+}
+
+enum ExcuseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+enum SettlementStatus {
+  REQUESTED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+model Admin {
+  id              String    @id @default(uuid())
+  loginId         String    @unique
+  passwordHash    String
+  role            AdminRole @default(ADMIN)
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdRecords  AttendanceRecord[] @relation("CreatedAttendanceRecords")
+  updatedRecords  AttendanceRecord[] @relation("UpdatedAttendanceRecords")
+  reviewedExcuses ExcuseRequest[] @relation("ReviewedExcuses")
+  settlements     Settlement[] @relation("CreatedSettlements")
+  paidItems       SettlementItem[] @relation("PaymentConfirmedBy")
+}
+
+model Member {
+  id                  String           @id @default(uuid())
+  name                String
+  part                String?
+  contact             String?          @unique
+  status              MemberStatus     @default(ACTIVE)
+  joinedAt            DateTime         @default(now())
+  publicDisplayName   String?
+  otpSecretEncrypted  String
+  otpFailedAttempts   Int              @default(0)
+  otpLockedUntil      DateTime?
+  note                String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  devices             MemberDevice[]
+  attendanceRecords   AttendanceRecord[]
+  excuseRequests      ExcuseRequest[]
+  settlementItems     SettlementItem[]
+
+  @@index([status, name])
+}
+
+model MemberDevice {
+  id          String    @id @default(uuid())
+  memberId    String
+  tokenHash   String    @unique
+  issuedAt    DateTime  @default(now())
+  lastUsedAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, revokedAt])
+}
+
+model AttendanceRecord {
+  id               String                 @id @default(uuid())
+  memberId         String
+  attendanceDate   DateTime               @db.Date
+  meetingType      MeetingType
+  status           AttendanceStatus
+  standardTime     DateTime?
+  arrivedAt        DateTime?
+  lateMinutes      Int?
+  method           RecordMethod
+  calculatedAmount Int                    @default(0)
+  settlementStatus RecordSettlementStatus @default(UNSETTLED)
+  note             String?
+  createdByAdminId String?
+  updatedByAdminId String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  member           Member                 @relation(fields: [memberId], references: [id])
+  createdByAdmin   Admin?                 @relation("CreatedAttendanceRecords", fields: [createdByAdminId], references: [id])
+  updatedByAdmin   Admin?                 @relation("UpdatedAttendanceRecords", fields: [updatedByAdminId], references: [id])
+  settlementItem   SettlementItem?
+
+  @@unique([memberId, attendanceDate, meetingType])
+  @@index([attendanceDate, settlementStatus])
+}
+
+model ExcuseRequest {
+  id                String       @id @default(uuid())
+  memberId          String
+  targetDate        DateTime     @db.Date
+  type              ExcuseType
+  reason            String
+  expectedArrivalAt DateTime?
+  status            ExcuseStatus @default(PENDING)
+  rejectionReason   String?
+  reviewedByAdminId String?
+  reviewedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  member            Member       @relation(fields: [memberId], references: [id])
+  reviewedByAdmin   Admin?       @relation("ReviewedExcuses", fields: [reviewedByAdminId], references: [id])
+
+  @@index([targetDate, status])
+}
+
+model Settlement {
+  id             String           @id @default(uuid())
+  name           String
+  startDate      DateTime         @db.Date
+  endDate        DateTime         @db.Date
+  status         SettlementStatus @default(REQUESTED)
+  policySnapshot Json
+  totalAmount    Int              @default(0)
+  createdById    String
+  confirmedAt    DateTime         @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  createdBy      Admin            @relation("CreatedSettlements", fields: [createdById], references: [id])
+  items          SettlementItem[]
+
+  @@index([status, startDate, endDate])
+}
+
+model SettlementItem {
+  id                 String        @id @default(uuid())
+  settlementId       String
+  memberId           String
+  attendanceRecordId String        @unique
+  meetingType        MeetingType
+  attendanceStatus   AttendanceStatus
+  calculationDetail  Json?
+  amount             Int
+  paymentStatus      PaymentStatus @default(UNPAID)
+  paidAt             DateTime?
+  paidByAdminId      String?
+  settlement         Settlement    @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  member             Member        @relation(fields: [memberId], references: [id])
+  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Restrict)
+  paidByAdmin        Admin?        @relation("PaymentConfirmedBy", fields: [paidByAdminId], references: [id])
+
+  @@index([settlementId, memberId])
+}
+
+model LateFeePolicy {
+  id                  String   @id @default(uuid())
+  saturdayStartMinutes Int      @default(630)
+  saturdayRates        Json
+  sundayLateAmount     Int      @default(3000)
+  sundayAbsentAmount   Int      @default(3000)
+  effectiveFrom        DateTime @db.Date
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([isActive, effectiveFrom])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorAdminId String?
+  actorMemberId String?
+  action       String
+  targetType   String
+  targetId     String
+  beforeData   Json?
+  afterData    Json?
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

@@ -1,52 +1,93 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import jwt from "jsonwebtoken";
+import { NextRequest, NextResponse } from "next/server";
+import { MemberStatus, MeetingType, RecordMethod } from "@prisma/client";
+import { calculateSaturdayLateFee } from "@/lib/late-fee";
+import { hashMemberDeviceToken, MEMBER_DEVICE_COOKIE } from "@/lib/member-auth";
+import { prisma } from "@/lib/prisma";
+import { getSeoulDateKey, getSeoulSaturdayStandardTime, getSeoulTimeLabel } from "@/lib/seoul-time";
 
-const prisma = new PrismaClient();
-const SECRET_KEY = process.env.JWT_SECRET || "default-secret-key";
+async function getVerifiedMember(request: NextRequest) {
+  const token = request.cookies.get(MEMBER_DEVICE_COOKIE)?.value;
+  if (!token) return null;
 
-export async function GET() {
-  try {
-    // ✅ 모든 출석 데이터 조회
-    const attendances = await prisma.attendance.findMany({
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    return NextResponse.json({ attendances });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "출석 데이터 조회 중 오류가 발생했습니다." }, { status: 500 });
+  const device = await prisma.memberDevice.findUnique({
+    where: { tokenHash: hashMemberDeviceToken(token) },
+    include: { member: true },
+  });
+  if (!device || device.revokedAt || device.expiresAt <= new Date() || device.member.status !== MemberStatus.ACTIVE) {
+    return null;
   }
+  await prisma.memberDevice.update({ where: { id: device.id }, data: { lastUsedAt: new Date() } });
+  return device.member;
 }
 
-export async function POST(req: Request) {
+export async function GET(request: NextRequest) {
+  const member = await getVerifiedMember(request);
+  if (!member) return NextResponse.json({ authenticated: false });
+
+  const today = new Date(`${getSeoulDateKey()}T00:00:00.000Z`);
+  const record = await prisma.attendanceRecord.findUnique({
+    where: { memberId_attendanceDate_meetingType: { memberId: member.id, attendanceDate: today, meetingType: MeetingType.SATURDAY } },
+  });
+  return NextResponse.json({
+    authenticated: true,
+    member: { id: member.id, name: member.name },
+    record: record && { arrivedAt: record.arrivedAt, lateMinutes: record.lateMinutes, amount: record.calculatedAmount },
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const member = await getVerifiedMember(request);
+  if (!member) return NextResponse.json({ error: "인증이 필요합니다." }, { status: 401 });
+
+  const arrivedAt = new Date();
+  const standardTime = getSeoulSaturdayStandardTime(arrivedAt);
+  const attendanceDate = new Date(`${getSeoulDateKey(arrivedAt)}T00:00:00.000Z`);
+  const lateMinutes = Math.max(0, Math.floor((arrivedAt.getTime() - standardTime.getTime()) / 60_000));
+
+  if (lateMinutes <= 0) {
+    return NextResponse.json({ error: "지각 기록은 모임 시작 시각 이후에만 남길 수 있습니다." }, { status: 422 });
+  }
+
+  const existing = await prisma.attendanceRecord.findUnique({
+    where: { memberId_attendanceDate_meetingType: { memberId: member.id, attendanceDate, meetingType: MeetingType.SATURDAY } },
+  });
+  if (existing) {
+    return NextResponse.json({
+      created: false,
+      member: { name: member.name },
+      arrivedAt: existing.arrivedAt,
+      arrivedAtLabel: existing.arrivedAt ? getSeoulTimeLabel(existing.arrivedAt) : null,
+      lateMinutes: existing.lateMinutes,
+      amount: existing.calculatedAmount,
+    });
+  }
+
   try {
-    const { token } = await req.json();
-
-    if (!token) {
-      return NextResponse.json({ error: "토큰이 없습니다." }, { status: 401 });
-    }
-
-    // ✅ 토큰 검증 및 파싱
-    const decoded = jwt.verify(token, SECRET_KEY) as { name: string; contact: string };
-
-    if (!decoded.name || !decoded.contact) {
-      return NextResponse.json({ error: "잘못된 토큰입니다." }, { status: 400 });
-    }
-
-    // ✅ 출석 데이터 저장
-    const attendance = await prisma.attendance.create({
+    const record = await prisma.attendanceRecord.create({
       data: {
-        name: decoded.name,
-        contact: decoded.contact,
+        memberId: member.id,
+        attendanceDate,
+        meetingType: MeetingType.SATURDAY,
+        status: "LATE",
+        standardTime,
+        arrivedAt,
+        lateMinutes,
+        method: RecordMethod.QR,
+        calculatedAmount: calculateSaturdayLateFee(lateMinutes),
       },
     });
-
-    return NextResponse.json({ message: "출석이 완료되었습니다.", attendance });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "출석 처리 중 오류가 발생했습니다." }, { status: 500 });
+    return NextResponse.json({
+      created: true,
+      member: { name: member.name },
+      arrivedAt: record.arrivedAt,
+      arrivedAtLabel: getSeoulTimeLabel(record.arrivedAt!),
+      lateMinutes: record.lateMinutes,
+      amount: record.calculatedAmount,
+    });
+  } catch (error: unknown) {
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+      return NextResponse.json({ error: "이미 오늘의 지각 기록이 처리되었습니다. 새로고침해주세요." }, { status: 409 });
+    }
+    throw error;
   }
 }

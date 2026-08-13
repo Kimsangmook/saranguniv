@@ -1,0 +1,99 @@
+CREATE TYPE "AdminRole" AS ENUM ('ADMIN', 'ATTENDANCE_MANAGER');
+CREATE TYPE "MemberStatus" AS ENUM ('ACTIVE', 'MILITARY', 'INTERCESSION', 'RESTING', 'GRADUATED', 'WITHDRAWN');
+CREATE TYPE "MeetingType" AS ENUM ('SATURDAY', 'SUNDAY');
+CREATE TYPE "AttendanceStatus" AS ENUM ('LATE', 'ABSENT');
+CREATE TYPE "RecordMethod" AS ENUM ('QR', 'ADMIN_MANUAL');
+CREATE TYPE "RecordSettlementStatus" AS ENUM ('UNSETTLED', 'REQUESTED', 'COMPLETED');
+CREATE TYPE "ExcuseType" AS ENUM ('LATE', 'ABSENT');
+CREATE TYPE "ExcuseStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED');
+CREATE TYPE "SettlementStatus" AS ENUM ('REQUESTED', 'COMPLETED');
+CREATE TYPE "PaymentStatus" AS ENUM ('UNPAID', 'PAID');
+
+CREATE TABLE "Admin" (
+  "id" TEXT NOT NULL, "loginId" TEXT NOT NULL, "passwordHash" TEXT NOT NULL,
+  "role" "AdminRole" NOT NULL DEFAULT 'ADMIN', "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "lastLoginAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Admin_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "Member" (
+  "id" TEXT NOT NULL, "name" TEXT NOT NULL, "part" TEXT, "contact" TEXT,
+  "status" "MemberStatus" NOT NULL DEFAULT 'ACTIVE', "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "publicDisplayName" TEXT, "otpSecretEncrypted" TEXT NOT NULL, "otpFailedAttempts" INTEGER NOT NULL DEFAULT 0,
+  "otpLockedUntil" TIMESTAMP(3), "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Member_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "MemberDevice" (
+  "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "tokenHash" TEXT NOT NULL,
+  "issuedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastUsedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "expiresAt" TIMESTAMP(3) NOT NULL, "revokedAt" TIMESTAMP(3), CONSTRAINT "MemberDevice_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "AttendanceRecord" (
+  "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "attendanceDate" DATE NOT NULL,
+  "meetingType" "MeetingType" NOT NULL, "status" "AttendanceStatus" NOT NULL, "standardTime" TIMESTAMP(3),
+  "arrivedAt" TIMESTAMP(3), "lateMinutes" INTEGER, "method" "RecordMethod" NOT NULL,
+  "calculatedAmount" INTEGER NOT NULL DEFAULT 0, "settlementStatus" "RecordSettlementStatus" NOT NULL DEFAULT 'UNSETTLED',
+  "note" TEXT, "createdByAdminId" TEXT, "updatedByAdminId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "AttendanceRecord_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "ExcuseRequest" (
+  "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "targetDate" DATE NOT NULL, "type" "ExcuseType" NOT NULL,
+  "reason" TEXT NOT NULL, "expectedArrivalAt" TIMESTAMP(3), "status" "ExcuseStatus" NOT NULL DEFAULT 'PENDING',
+  "rejectionReason" TEXT, "reviewedByAdminId" TEXT, "reviewedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "ExcuseRequest_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "Settlement" (
+  "id" TEXT NOT NULL, "name" TEXT NOT NULL, "startDate" DATE NOT NULL, "endDate" DATE NOT NULL,
+  "status" "SettlementStatus" NOT NULL DEFAULT 'REQUESTED', "policySnapshot" JSONB NOT NULL,
+  "totalAmount" INTEGER NOT NULL DEFAULT 0, "createdById" TEXT NOT NULL,
+  "confirmedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "completedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "Settlement_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "SettlementItem" (
+  "id" TEXT NOT NULL, "settlementId" TEXT NOT NULL, "memberId" TEXT NOT NULL, "attendanceRecordId" TEXT NOT NULL,
+  "meetingType" "MeetingType" NOT NULL, "attendanceStatus" "AttendanceStatus" NOT NULL,
+  "calculationDetail" JSONB, "amount" INTEGER NOT NULL, "paymentStatus" "PaymentStatus" NOT NULL DEFAULT 'UNPAID',
+  "paidAt" TIMESTAMP(3), "paidByAdminId" TEXT, CONSTRAINT "SettlementItem_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "LateFeePolicy" (
+  "id" TEXT NOT NULL, "saturdayStartMinutes" INTEGER NOT NULL DEFAULT 630, "saturdayRates" JSONB NOT NULL,
+  "sundayLateAmount" INTEGER NOT NULL DEFAULT 3000, "sundayAbsentAmount" INTEGER NOT NULL DEFAULT 3000,
+  "effectiveFrom" DATE NOT NULL, "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "LateFeePolicy_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "AuditLog" (
+  "id" TEXT NOT NULL, "actorAdminId" TEXT, "actorMemberId" TEXT, "action" TEXT NOT NULL,
+  "targetType" TEXT NOT NULL, "targetId" TEXT NOT NULL, "beforeData" JSONB, "afterData" JSONB,
+  "reason" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "Admin_loginId_key" ON "Admin"("loginId");
+CREATE UNIQUE INDEX "Member_contact_key" ON "Member"("contact");
+CREATE INDEX "Member_status_name_idx" ON "Member"("status", "name");
+CREATE UNIQUE INDEX "MemberDevice_tokenHash_key" ON "MemberDevice"("tokenHash");
+CREATE INDEX "MemberDevice_memberId_revokedAt_idx" ON "MemberDevice"("memberId", "revokedAt");
+CREATE INDEX "AttendanceRecord_attendanceDate_settlementStatus_idx" ON "AttendanceRecord"("attendanceDate", "settlementStatus");
+CREATE UNIQUE INDEX "AttendanceRecord_memberId_attendanceDate_meetingType_key" ON "AttendanceRecord"("memberId", "attendanceDate", "meetingType");
+CREATE INDEX "ExcuseRequest_targetDate_status_idx" ON "ExcuseRequest"("targetDate", "status");
+CREATE INDEX "Settlement_status_startDate_endDate_idx" ON "Settlement"("status", "startDate", "endDate");
+CREATE UNIQUE INDEX "SettlementItem_attendanceRecordId_key" ON "SettlementItem"("attendanceRecordId");
+CREATE INDEX "SettlementItem_settlementId_memberId_idx" ON "SettlementItem"("settlementId", "memberId");
+CREATE INDEX "LateFeePolicy_isActive_effectiveFrom_idx" ON "LateFeePolicy"("isActive", "effectiveFrom");
+CREATE INDEX "AuditLog_targetType_targetId_idx" ON "AuditLog"("targetType", "targetId");
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+
+ALTER TABLE "MemberDevice" ADD CONSTRAINT "MemberDevice_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_createdByAdminId_fkey" FOREIGN KEY ("createdByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_updatedByAdminId_fkey" FOREIGN KEY ("updatedByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ExcuseRequest" ADD CONSTRAINT "ExcuseRequest_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ExcuseRequest" ADD CONSTRAINT "ExcuseRequest_reviewedByAdminId_fkey" FOREIGN KEY ("reviewedByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Settlement" ADD CONSTRAINT "Settlement_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "Admin"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_settlementId_fkey" FOREIGN KEY ("settlementId") REFERENCES "Settlement"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_attendanceRecordId_fkey" FOREIGN KEY ("attendanceRecordId") REFERENCES "AttendanceRecord"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_paidByAdminId_fkey" FOREIGN KEY ("paidByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
