@@ -3,6 +3,11 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 
 const HOME_LINKS = [
   {
+    href: "/schedule",
+    title: "일정 공유",
+    description: "이번 달 승인된 불참 일정을 확인해요",
+  },
+  {
     href: "/calendar",
     title: "사유 제출",
     description: "지각·결석 사유를 미리 제출해요",
