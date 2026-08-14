@@ -37,6 +37,7 @@ export default function CalendarPage() {
 
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [memberId, setMemberId] = useState("");
+  const [locked, setLocked] = useState(false);
   const [excuseType, setExcuseType] = useState<"LATE" | "ABSENT">("LATE");
   const [reason, setReason] = useState("");
   const [expectedArrival, setExpectedArrival] = useState("");
@@ -50,12 +51,32 @@ export default function CalendarPage() {
         if (!response.ok) throw new Error("failed");
         return response.json();
       })
-      .then((data) => setMembers(data.members ?? []))
-      .catch(() => setMembersError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."));
+      .then((data) => {
+        const loadedMembers: Member[] = data.members ?? [];
+        setMembers(loadedMembers);
 
-    const savedMemberId = window.localStorage.getItem(MEMBER_STORAGE_KEY);
-    if (savedMemberId) setMemberId(savedMemberId);
+        // 저장된 팀원이 아직 현역 목록에 있을 때만 고정한다.
+        let savedMemberId = "";
+        try {
+          savedMemberId = window.localStorage.getItem(MEMBER_STORAGE_KEY) ?? "";
+        } catch {
+          savedMemberId = "";
+        }
+        if (savedMemberId && loadedMembers.some((member) => member.id === savedMemberId)) {
+          setMemberId(savedMemberId);
+          setLocked(true);
+        } else if (savedMemberId) {
+          try {
+            window.localStorage.removeItem(MEMBER_STORAGE_KEY);
+          } catch {
+            // localStorage 접근 불가 시 무시한다.
+          }
+        }
+      })
+      .catch(() => setMembersError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."));
   }, []);
+
+  const selectedMember = members.find((member) => member.id === memberId);
 
   const cells = useMemo(() => {
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -118,7 +139,12 @@ export default function CalendarPage() {
         setSubmitError(data?.error ?? "사유 신청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
         return;
       }
-      window.localStorage.setItem(MEMBER_STORAGE_KEY, memberId);
+      try {
+        window.localStorage.setItem(MEMBER_STORAGE_KEY, memberId);
+      } catch {
+        // localStorage 접근 불가 시 무시한다.
+      }
+      setLocked(true);
       setSubmitted(true);
     } catch {
       setSubmitError("사유 신청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
@@ -226,20 +252,49 @@ export default function CalendarPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="excuse-member">본인 선택</Label>
-              <Select
-                id="excuse-member"
-                value={memberId}
-                onChange={(event) => setMemberId(event.target.value)}
-              >
-                <option value="">이름을 선택해주세요</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                    {member.part ? ` (${member.part})` : ""}
-                  </option>
-                ))}
-              </Select>
+              {locked && selectedMember ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{selectedMember.name}</p>
+                    {selectedMember.part && (
+                      <p className="truncate text-xs text-muted-foreground">{selectedMember.part}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLocked(false);
+                      setMemberId("");
+                      try {
+                        window.localStorage.removeItem(MEMBER_STORAGE_KEY);
+                      } catch {
+                        // localStorage 접근 불가 시 무시한다.
+                      }
+                    }}
+                    className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    본인이 아니신가요?
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Label htmlFor="excuse-member">본인 선택</Label>
+                  <Select
+                    id="excuse-member"
+                    className="h-11"
+                    value={memberId}
+                    onChange={(event) => setMemberId(event.target.value)}
+                  >
+                    <option value="">이름을 선택해주세요</option>
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                        {member.part ? ` (${member.part})` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </>
+              )}
               {membersError && <p className="text-sm text-destructive">{membersError}</p>}
             </div>
 

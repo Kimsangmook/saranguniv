@@ -11,14 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 type Member = { id: string; name: string; part: string | null };
 
@@ -47,9 +39,34 @@ const STATUS_BADGE_VARIANTS: Record<
   CANCELED: "secondary",
 };
 
+function readStoredMemberId(): string {
+  try {
+    return window.localStorage.getItem(MEMBER_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredMemberId(value: string) {
+  try {
+    window.localStorage.setItem(MEMBER_STORAGE_KEY, value);
+  } catch {
+    // localStorage 접근 불가(시크릿 모드 등) 시 무시한다.
+  }
+}
+
+function clearStoredMemberId() {
+  try {
+    window.localStorage.removeItem(MEMBER_STORAGE_KEY);
+  } catch {
+    // localStorage 접근 불가 시 무시한다.
+  }
+}
+
 export default function MyRequestsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [memberId, setMemberId] = useState("");
+  const [locked, setLocked] = useState(false);
   const [excuses, setExcuses] = useState<Excuse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -59,16 +76,26 @@ export default function MyRequestsPage() {
   const [cancelError, setCancelError] = useState("");
 
   useEffect(() => {
+    const storedMemberId = readStoredMemberId();
+
     fetch("/api/members")
       .then(async (response) => {
         if (!response.ok) throw new Error("failed");
         return response.json();
       })
-      .then((data) => setMembers(data.members ?? []))
-      .catch(() => setError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."));
+      .then((data) => {
+        const loadedMembers: Member[] = data.members ?? [];
+        setMembers(loadedMembers);
 
-    const savedMemberId = window.localStorage.getItem(MEMBER_STORAGE_KEY);
-    if (savedMemberId) setMemberId(savedMemberId);
+        // 저장된 팀원이 아직 현역 목록에 있을 때만 고정한다.
+        if (storedMemberId && loadedMembers.some((member) => member.id === storedMemberId)) {
+          setMemberId(storedMemberId);
+          setLocked(true);
+        } else if (storedMemberId) {
+          clearStoredMemberId();
+        }
+      })
+      .catch(() => setError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."));
   }, []);
 
   const loadExcuses = useCallback(async (targetMemberId: string) => {
@@ -102,8 +129,17 @@ export default function MyRequestsPage() {
   function handleMemberChange(nextMemberId: string) {
     setMemberId(nextMemberId);
     if (nextMemberId) {
-      window.localStorage.setItem(MEMBER_STORAGE_KEY, nextMemberId);
+      writeStoredMemberId(nextMemberId);
+      setLocked(true);
     }
+  }
+
+  function handleChangeMember() {
+    clearStoredMemberId();
+    setLocked(false);
+    setMemberId("");
+    setExcuses([]);
+    setError("");
   }
 
   async function handleCancel() {
@@ -130,32 +166,56 @@ export default function MyRequestsPage() {
     }
   }
 
+  const selectedMember = members.find((member) => member.id === memberId);
+
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>내 신청 내역</CardTitle>
           <CardDescription>
-            본인을 선택하면 제출한 지각·결석 사유 신청 내역을 확인할 수 있습니다.
+            제출한 지각·결석 사유 신청과 처리 상태를 확인할 수 있습니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-xs space-y-2">
-            <Label htmlFor="my-member">본인 선택</Label>
-            <Select
-              id="my-member"
-              value={memberId}
-              onChange={(event) => handleMemberChange(event.target.value)}
-            >
-              <option value="">이름을 선택해주세요</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
-                  {member.part ? ` (${member.part})` : ""}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {locked && selectedMember ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-lg font-semibold">{selectedMember.name}</p>
+                {selectedMember.part && (
+                  <p className="truncate text-xs text-muted-foreground">{selectedMember.part}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleChangeMember}
+                className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                본인이 아니신가요?
+              </button>
+            </div>
+          ) : (
+            <div className="max-w-xs space-y-2">
+              <Label htmlFor="my-member">본인 선택</Label>
+              <Select
+                id="my-member"
+                className="h-11"
+                value={memberId}
+                onChange={(event) => handleMemberChange(event.target.value)}
+              >
+                <option value="">이름을 선택해주세요</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                    {member.part ? ` (${member.part})` : ""}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                한 번 선택하면 이 기기에서는 계속 기억합니다.
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -175,69 +235,55 @@ export default function MyRequestsPage() {
             </p>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>대상 날짜</TableHead>
-                    <TableHead>구분</TableHead>
-                    <TableHead>사유</TableHead>
-                    <TableHead>예상 도착</TableHead>
-                    <TableHead>상태</TableHead>
-                    <TableHead>반려 사유</TableHead>
-                    <TableHead>제출 시각</TableHead>
-                    <TableHead>처리 시각</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {excuses.map((excuse) => (
-                    <TableRow key={excuse.id}>
-                      <TableCell className="whitespace-nowrap">
-                        {formatDbDate(dateKeyToDbDate(excuse.excuseDate))}
-                      </TableCell>
-                      <TableCell>{EXCUSE_TYPE_LABELS[excuse.excuseType]}</TableCell>
-                      <TableCell className="max-w-[16rem] whitespace-pre-wrap break-words">
-                        {excuse.reason}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {excuse.expectedArrival ?? "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_BADGE_VARIANTS[excuse.status]}>
-                          {EXCUSE_STATUS_LABELS[excuse.status]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[12rem] whitespace-pre-wrap break-words">
-                        {excuse.rejectionReason ?? "-"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {excuse.submittedAtLabel}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {excuse.reviewedAtLabel ?? "-"}
-                      </TableCell>
-                      <TableCell>
-                        {excuse.status === "PENDING" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setCancelError("");
-                              setCancelTarget(excuse);
-                            }}
-                          >
-                            취소
-                          </Button>
-                        ) : (
-                          <span className="whitespace-nowrap text-xs text-muted-foreground">
-                            수정 불가
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ul className="space-y-3">
+                {excuses.map((excuse) => (
+                  <li key={excuse.id} className="rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {formatDbDate(dateKeyToDbDate(excuse.excuseDate))}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {EXCUSE_TYPE_LABELS[excuse.excuseType]}
+                          {excuse.expectedArrival ? ` · 예상 도착 ${excuse.expectedArrival}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant={STATUS_BADGE_VARIANTS[excuse.status]} className="shrink-0">
+                        {EXCUSE_STATUS_LABELS[excuse.status]}
+                      </Badge>
+                    </div>
+
+                    <p className="mt-3 whitespace-pre-wrap break-words text-sm">{excuse.reason}</p>
+
+                    {excuse.rejectionReason && (
+                      <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                        반려 사유: {excuse.rejectionReason}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        제출 {excuse.submittedAtLabel}
+                        {excuse.reviewedAtLabel ? ` · 처리 ${excuse.reviewedAtLabel}` : ""}
+                      </p>
+                      {excuse.status === "PENDING" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setCancelError("");
+                            setCancelTarget(excuse);
+                          }}
+                        >
+                          신청 취소
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">수정 불가</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
               <p className="text-xs text-muted-foreground">
                 승인·반려·취소된 신청은 수정할 수 없습니다. 승인 대기 상태에서만 취소할 수
                 있습니다.
