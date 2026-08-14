@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { AttendanceStatus, MemberStatus, MeetingType, Prisma, RecordMethod } from "@prisma/client";
 import { getActivePolicy } from "@/lib/policy";
 import { prisma } from "@/lib/prisma";
-import { getSeoulAttendanceDate, getSeoulTimeLabel, isSeoulSaturday } from "@/lib/seoul-time";
+import { getSeoulAttendanceDate, getSeoulTimeLabel } from "@/lib/seoul-time";
 import { calculateWithRates, getStandardTimeForDate } from "@/lib/settlement";
 
 function toRecordResponse(created: boolean, memberName: string, record: { status: AttendanceStatus; arrivedAt: Date | null; lateMinutes: number | null; calculatedAmount: number }) {
@@ -46,9 +46,6 @@ export async function POST(request: Request) {
   }
 
   const arrivedAt = new Date();
-  if (!isSeoulSaturday(arrivedAt)) {
-    return NextResponse.json({ error: "토요일 모임 시간에만 지각을 기록할 수 있습니다." }, { status: 422 });
-  }
 
   // 활성 정책의 토요일 기준 시각·요율로 계산한다 (10:30 고정·기본 요율 사용 금지)
   const policy = await getActivePolicy();
