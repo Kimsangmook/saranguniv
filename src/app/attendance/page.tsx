@@ -15,25 +15,66 @@ type Result = {
   amount: number;
 };
 
+// 사유 제출 달력·내 신청 내역과 동일한 키를 사용해 한 기기에서 한 번 선택하면 계속 기억한다.
+const MEMBER_STORAGE_KEY = "latefee.memberId";
+
+function readStoredMemberId(): string {
+  try {
+    return window.localStorage.getItem(MEMBER_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredMemberId(value: string) {
+  try {
+    window.localStorage.setItem(MEMBER_STORAGE_KEY, value);
+  } catch {
+    // localStorage 접근 불가(시크릿 모드 등) 시 무시한다.
+  }
+}
+
+function clearStoredMemberId() {
+  try {
+    window.localStorage.removeItem(MEMBER_STORAGE_KEY);
+  } catch {
+    // localStorage 접근 불가 시 무시한다.
+  }
+}
+
 export default function AttendancePage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [recordedMemberIds, setRecordedMemberIds] = useState<string[]>([]);
   const [memberId, setMemberId] = useState("");
+  const [locked, setLocked] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
   useEffect(() => {
+    const storedMemberId = readStoredMemberId();
+
     fetch("/api/attendance")
       .then(async (response) => {
         if (!response.ok) throw new Error("failed");
         return response.json();
       })
       .then((data) => {
-        setMembers(data.members ?? []);
+        const loadedMembers: Member[] = data.members ?? [];
+        setMembers(loadedMembers);
         setRecordedMemberIds(data.recordedMemberIds ?? []);
+
+        // 저장된 팀원이 아직 현역 목록에 있을 때만 고정한다.
+        if (storedMemberId && loadedMembers.some((member) => member.id === storedMemberId)) {
+          setMemberId(storedMemberId);
+          setLocked(true);
+        } else if (storedMemberId) {
+          clearStoredMemberId();
+        }
       })
-      .catch(() => setError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."));
+      .catch(() => setError("팀원 목록을 불러오지 못했습니다. 새로고침해주세요."))
+      .finally(() => setLoaded(true));
   }, []);
 
   const selectedMember = members.find((member) => member.id === memberId);
@@ -55,6 +96,8 @@ export default function AttendancePage() {
         setError(data.error ?? "지각 기록을 처리하지 못했습니다.");
         return;
       }
+      writeStoredMemberId(memberId);
+      setLocked(true);
       setResult(data);
       setRecordedMemberIds((previous) => previous.includes(memberId) ? previous : [...previous, memberId]);
     } catch {
@@ -66,7 +109,15 @@ export default function AttendancePage() {
 
   function handleReset() {
     setResult(null);
+    setError("");
+    if (!locked) setMemberId("");
+  }
+
+  function handleChangeMember() {
+    clearStoredMemberId();
+    setLocked(false);
     setMemberId("");
+    setResult(null);
     setError("");
   }
 
@@ -103,12 +154,54 @@ export default function AttendancePage() {
     );
   }
 
+  if (!loaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4 text-sm text-muted-foreground">
+        불러오는 중입니다.
+      </main>
+    );
+  }
+
+  // 이 기기에 저장된 팀원이 있으면 선택 없이 바로 기록한다.
+  if (locked && selectedMember) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>지각 기록</CardTitle>
+            <CardDescription>아래 버튼을 누르면 지금 시각으로 기록됩니다.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="rounded-md border bg-background px-4 py-5 text-center">
+              <p className="text-2xl font-bold">{selectedMember.name}</p>
+              {selectedMember.part && <p className="mt-1 text-sm text-muted-foreground">{selectedMember.part}</p>}
+            </div>
+            {alreadyRecorded
+              ? <p className="text-sm text-amber-600">이미 오늘 기록이 있습니다. 기록하기를 누르면 기존 기록을 보여드립니다.</p>
+              : <p className="text-sm text-muted-foreground">서버 시각 기준으로 도착 시간이 기록됩니다.</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button className="w-full" type="button" disabled={submitting} onClick={handleSubmit}>
+              {submitting ? "기록 중..." : alreadyRecorded ? "기존 기록 확인하기" : "기록하기"}
+            </Button>
+            <button
+              type="button"
+              onClick={handleChangeMember}
+              className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              본인이 아니신가요? 다시 선택하기
+            </button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>지각 기록</CardTitle>
-          <CardDescription>목록에서 본인을 선택한 뒤 기록하기 버튼을 눌러주세요.</CardDescription>
+          <CardDescription>목록에서 본인을 선택한 뒤 기록하기 버튼을 눌러주세요. 한 번 기록하면 이 기기에서는 다음부터 선택 없이 바로 기록됩니다.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>
