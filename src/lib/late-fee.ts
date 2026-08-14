@@ -26,9 +26,3 @@ export function calculateSaturdayLateFee(
   if (!rate) throw new Error("지각비 구간이 올바르지 않습니다.");
   return Math.floor(lateMinutes) * rate.amountPerMinute;
 }
-
-export function getLateMinutes(arrivedAt: Date, startHour = 10, startMinute = 30): number {
-  const standardTime = new Date(arrivedAt);
-  standardTime.setHours(startHour, startMinute, 0, 0);
-  return Math.max(0, Math.floor((arrivedAt.getTime() - standardTime.getTime()) / 60_000));
-}

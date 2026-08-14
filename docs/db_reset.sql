@@ -118,3 +118,8 @@ INSERT INTO "LateFeePolicy" ("id", "saturdayStartMinutes", "saturdayRates", "sun
 VALUES ('22222222-2222-4222-8222-222222222222', 630,
   '[{"throughMinute":10,"amountPerMinute":100},{"throughMinute":20,"amountPerMinute":300},{"throughMinute":30,"amountPerMinute":500},{"throughMinute":null,"amountPerMinute":1000}]'::jsonb,
   3000, 3000, CURRENT_DATE, true, CURRENT_TIMESTAMP);
+
+-- 관리자 시드 (아이디: admin / 비밀번호: 1234)
+-- 해시는 src/lib/auth.ts의 scrypt 형식(scrypt$16384$8$1$<saltHex>$<hashHex>)으로 생성됨
+INSERT INTO "Admin" ("id","loginId","passwordHash","role","isActive","updatedAt")
+VALUES ('33333333-3333-4333-8333-333333333333','admin','scrypt$16384$8$1$8faecc962616004e7103ee102dfea613$0ac1f23fade53894b14d125dc3ff8b64e1680e67da0f009424e81dbc1d4f2451a9f309aee8d4ee99fa20ef1580a68d455a4e17c282e3923591bded65236b2e66','ADMIN',true,CURRENT_TIMESTAMP);

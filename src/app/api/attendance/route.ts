@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
 import { AttendanceStatus, MemberStatus, MeetingType, Prisma, RecordMethod } from "@prisma/client";
-import { calculateSaturdayLateFee } from "@/lib/late-fee";
+import { getActivePolicy } from "@/lib/policy";
 import { prisma } from "@/lib/prisma";
-import { getSeoulDateKey, getSeoulSaturdayStandardTime, getSeoulTimeLabel } from "@/lib/seoul-time";
-
-function getSeoulAttendanceDate(date: Date): Date {
-  return new Date(`${getSeoulDateKey(date)}T00:00:00.000Z`);
-}
-
-function isSeoulSaturday(date: Date): boolean {
-  return getSeoulAttendanceDate(date).getUTCDay() === 6;
-}
+import { getSeoulAttendanceDate, getSeoulTimeLabel, isSeoulSaturday } from "@/lib/seoul-time";
+import { calculateWithRates, getStandardTimeForDate } from "@/lib/settlement";
 
 function toRecordResponse(created: boolean, memberName: string, record: { status: AttendanceStatus; arrivedAt: Date | null; lateMinutes: number | null; calculatedAmount: number }) {
   return {
@@ -57,8 +50,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "토요일 모임 시간에만 지각을 기록할 수 있습니다." }, { status: 422 });
   }
 
-  const standardTime = getSeoulSaturdayStandardTime(arrivedAt);
+  // 활성 정책의 토요일 기준 시각·요율로 계산한다 (10:30 고정·기본 요율 사용 금지)
+  const policy = await getActivePolicy();
   const attendanceDate = getSeoulAttendanceDate(arrivedAt);
+  const standardTime = getStandardTimeForDate(attendanceDate, policy.saturdayStartMinutes);
   const lateMinutes = Math.max(0, Math.floor((arrivedAt.getTime() - standardTime.getTime()) / 60_000));
 
   if (lateMinutes <= 0) {
@@ -85,7 +80,7 @@ export async function POST(request: Request) {
         arrivedAt,
         lateMinutes,
         method: RecordMethod.QR,
-        calculatedAmount: calculateSaturdayLateFee(lateMinutes),
+        calculatedAmount: calculateWithRates(lateMinutes, policy.saturdayRates),
       },
     });
     return NextResponse.json(toRecordResponse(true, member.name, record));
