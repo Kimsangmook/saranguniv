@@ -109,9 +109,7 @@ ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_memberId_fkey" FOREI
 ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_attendanceRecordId_fkey" FOREIGN KEY ("attendanceRecordId") REFERENCES "AttendanceRecord"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_paidByAdminId_fkey" FOREIGN KEY ("paidByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- 테스트 팀원 시드
-INSERT INTO "Member" ("id", "name", "part", "status", "updatedAt")
-VALUES ('11111111-1111-4111-8111-111111111111', '김찬양', '테스트', 'ACTIVE', CURRENT_TIMESTAMP);
+-- 팀원 시드는 두지 않는다. 팀원은 관리자 CMS(/admin/members)에서 등록한다.
 
 -- 지각비 활성 정책 시드 (토요일 10:30 기준, late-fee.ts DEFAULT_SATURDAY_RATES와 동일)
 INSERT INTO "LateFeePolicy" ("id", "saturdayStartMinutes", "saturdayRates", "sundayLateAmount", "sundayAbsentAmount", "effectiveFrom", "isActive", "updatedAt")
