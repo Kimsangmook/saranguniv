@@ -18,14 +18,8 @@ CREATE TABLE "Admin" (
 CREATE TABLE "Member" (
   "id" TEXT NOT NULL, "name" TEXT NOT NULL, "part" TEXT, "contact" TEXT,
   "status" "MemberStatus" NOT NULL DEFAULT 'ACTIVE', "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "publicDisplayName" TEXT, "otpSecretEncrypted" TEXT NOT NULL, "otpFailedAttempts" INTEGER NOT NULL DEFAULT 0,
-  "otpLockedUntil" TIMESTAMP(3), "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "publicDisplayName" TEXT, "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Member_pkey" PRIMARY KEY ("id")
-);
-CREATE TABLE "MemberDevice" (
-  "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "tokenHash" TEXT NOT NULL,
-  "issuedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastUsedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "expiresAt" TIMESTAMP(3) NOT NULL, "revokedAt" TIMESTAMP(3), CONSTRAINT "MemberDevice_pkey" PRIMARY KEY ("id")
 );
 CREATE TABLE "AttendanceRecord" (
   "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "attendanceDate" DATE NOT NULL,
@@ -74,8 +68,6 @@ CREATE TABLE "AuditLog" (
 CREATE UNIQUE INDEX "Admin_loginId_key" ON "Admin"("loginId");
 CREATE UNIQUE INDEX "Member_contact_key" ON "Member"("contact");
 CREATE INDEX "Member_status_name_idx" ON "Member"("status", "name");
-CREATE UNIQUE INDEX "MemberDevice_tokenHash_key" ON "MemberDevice"("tokenHash");
-CREATE INDEX "MemberDevice_memberId_revokedAt_idx" ON "MemberDevice"("memberId", "revokedAt");
 CREATE INDEX "AttendanceRecord_attendanceDate_settlementStatus_idx" ON "AttendanceRecord"("attendanceDate", "settlementStatus");
 CREATE UNIQUE INDEX "AttendanceRecord_memberId_attendanceDate_meetingType_key" ON "AttendanceRecord"("memberId", "attendanceDate", "meetingType");
 CREATE INDEX "ExcuseRequest_targetDate_status_idx" ON "ExcuseRequest"("targetDate", "status");
@@ -86,7 +78,6 @@ CREATE INDEX "LateFeePolicy_isActive_effectiveFrom_idx" ON "LateFeePolicy"("isAc
 CREATE INDEX "AuditLog_targetType_targetId_idx" ON "AuditLog"("targetType", "targetId");
 CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
 
-ALTER TABLE "MemberDevice" ADD CONSTRAINT "MemberDevice_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_createdByAdminId_fkey" FOREIGN KEY ("createdByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_updatedByAdminId_fkey" FOREIGN KEY ("updatedByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;

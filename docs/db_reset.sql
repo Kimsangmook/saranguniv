@@ -16,7 +16,7 @@ CREATE TABLE "_prisma_migrations" (
     "applied_steps_count" INTEGER NOT NULL DEFAULT 0
 );
 INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "started_at", "applied_steps_count")
-VALUES ('a1b2c3d4-0000-4000-8000-000000000001', '2e8463dd1668a01e4c45f03c2df90b75a8d32d3d403a113e849e07d7a5320a75', now(), '20260814000000_init', now(), 1);
+VALUES ('a1b2c3d4-0000-4000-8000-000000000001', '125868bf9421792dcf02c4f152fc311c78bc4757470cb1b4b8e45ac87719bf16', now(), '20260814000000_init', now(), 1);
 
 CREATE TYPE "AdminRole" AS ENUM ('ADMIN', 'ATTENDANCE_MANAGER');
 CREATE TYPE "MemberStatus" AS ENUM ('ACTIVE', 'MILITARY', 'INTERCESSION', 'RESTING', 'GRADUATED', 'WITHDRAWN');
@@ -38,14 +38,8 @@ CREATE TABLE "Admin" (
 CREATE TABLE "Member" (
   "id" TEXT NOT NULL, "name" TEXT NOT NULL, "part" TEXT, "contact" TEXT,
   "status" "MemberStatus" NOT NULL DEFAULT 'ACTIVE', "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "publicDisplayName" TEXT, "otpSecretEncrypted" TEXT NOT NULL, "otpFailedAttempts" INTEGER NOT NULL DEFAULT 0,
-  "otpLockedUntil" TIMESTAMP(3), "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "publicDisplayName" TEXT, "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Member_pkey" PRIMARY KEY ("id")
-);
-CREATE TABLE "MemberDevice" (
-  "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "tokenHash" TEXT NOT NULL,
-  "issuedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastUsedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "expiresAt" TIMESTAMP(3) NOT NULL, "revokedAt" TIMESTAMP(3), CONSTRAINT "MemberDevice_pkey" PRIMARY KEY ("id")
 );
 CREATE TABLE "AttendanceRecord" (
   "id" TEXT NOT NULL, "memberId" TEXT NOT NULL, "attendanceDate" DATE NOT NULL,
@@ -94,8 +88,6 @@ CREATE TABLE "AuditLog" (
 CREATE UNIQUE INDEX "Admin_loginId_key" ON "Admin"("loginId");
 CREATE UNIQUE INDEX "Member_contact_key" ON "Member"("contact");
 CREATE INDEX "Member_status_name_idx" ON "Member"("status", "name");
-CREATE UNIQUE INDEX "MemberDevice_tokenHash_key" ON "MemberDevice"("tokenHash");
-CREATE INDEX "MemberDevice_memberId_revokedAt_idx" ON "MemberDevice"("memberId", "revokedAt");
 CREATE INDEX "AttendanceRecord_attendanceDate_settlementStatus_idx" ON "AttendanceRecord"("attendanceDate", "settlementStatus");
 CREATE UNIQUE INDEX "AttendanceRecord_memberId_attendanceDate_meetingType_key" ON "AttendanceRecord"("memberId", "attendanceDate", "meetingType");
 CREATE INDEX "ExcuseRequest_targetDate_status_idx" ON "ExcuseRequest"("targetDate", "status");
@@ -106,7 +98,6 @@ CREATE INDEX "LateFeePolicy_isActive_effectiveFrom_idx" ON "LateFeePolicy"("isAc
 CREATE INDEX "AuditLog_targetType_targetId_idx" ON "AuditLog"("targetType", "targetId");
 CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
 
-ALTER TABLE "MemberDevice" ADD CONSTRAINT "MemberDevice_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_createdByAdminId_fkey" FOREIGN KEY ("createdByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "AttendanceRecord" ADD CONSTRAINT "AttendanceRecord_updatedByAdminId_fkey" FOREIGN KEY ("updatedByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -118,8 +109,12 @@ ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_memberId_fkey" FOREI
 ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_attendanceRecordId_fkey" FOREIGN KEY ("attendanceRecordId") REFERENCES "AttendanceRecord"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "SettlementItem" ADD CONSTRAINT "SettlementItem_paidByAdminId_fkey" FOREIGN KEY ("paidByAdminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- 테스트 팀원 시드 (OTP 인증 테스트용)
-INSERT INTO "Member" ("id", "name", "part", "status", "otpSecretEncrypted", "updatedAt")
-VALUES ('11111111-1111-4111-8111-111111111111', '김찬양', '테스트', 'ACTIVE',
-  'v1.b_CGapYqLekPrsAQ.gVUqIuSTs81GkKtbMDYvdQ.CkJcmTdLcOEPHvWDQu_0tM0L8TVL7Br00G5SD6ExJes',
-  CURRENT_TIMESTAMP);
+-- 테스트 팀원 시드
+INSERT INTO "Member" ("id", "name", "part", "status", "updatedAt")
+VALUES ('11111111-1111-4111-8111-111111111111', '김찬양', '테스트', 'ACTIVE', CURRENT_TIMESTAMP);
+
+-- 지각비 활성 정책 시드 (토요일 10:30 기준, late-fee.ts DEFAULT_SATURDAY_RATES와 동일)
+INSERT INTO "LateFeePolicy" ("id", "saturdayStartMinutes", "saturdayRates", "sundayLateAmount", "sundayAbsentAmount", "effectiveFrom", "isActive", "updatedAt")
+VALUES ('22222222-2222-4222-8222-222222222222', 630,
+  '[{"throughMinute":10,"amountPerMinute":100},{"throughMinute":20,"amountPerMinute":300},{"throughMinute":30,"amountPerMinute":500},{"throughMinute":null,"amountPerMinute":1000}]'::jsonb,
+  3000, 3000, CURRENT_DATE, true, CURRENT_TIMESTAMP);
