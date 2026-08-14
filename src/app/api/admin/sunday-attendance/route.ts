@@ -125,7 +125,6 @@ export async function POST(request: Request) {
     for (const entry of entries) {
       const memberId = entry.memberId!;
       const status = entry.status as "NONE" | "LATE" | "ABSENT";
-      const note = entry.note?.trim() || null;
       const memberName = memberNameById.get(memberId) ?? null;
 
       if (!memberName) {
@@ -142,6 +141,8 @@ export async function POST(request: Request) {
       }
 
       const existing = recordByMemberId.get(memberId);
+      // note를 보내지 않으면 기존 메모를 유지한다 (일요일 출결 화면에는 메모 입력이 없다).
+      const note = entry.note === undefined ? existing?.note ?? null : entry.note.trim() || null;
 
       // 정산에 포함된 기록은 수정/삭제 불가
       if (existing && existing.settlementStatus !== "UNSETTLED") {

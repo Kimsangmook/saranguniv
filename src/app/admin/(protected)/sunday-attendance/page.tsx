@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttendanceStatus, RecordSettlementStatus } from "@prisma/client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RECORD_SETTLEMENT_STATUS_LABELS, formatKrw } from "@/lib/labels";
+import { formatKrw } from "@/lib/labels";
 import { formatDbDate, getDayOfWeekFromDateKey, getSeoulDateKey } from "@/lib/seoul-time";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +48,7 @@ export default function AdminSundayAttendancePage() {
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [approvedExcuseMemberIds, setApprovedExcuseMemberIds] = useState<string[]>([]);
   const [policy, setPolicy] = useState({ sundayLateAmount: 0, sundayAbsentAmount: 0 });
-  const [entries, setEntries] = useState<Record<string, { status: EntryStatus; note: string }>>({});
+  const [entries, setEntries] = useState<Record<string, EntryStatus>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -71,13 +70,10 @@ export default function AdminSundayAttendancePage() {
       }
       const loadedRecords: RecordRow[] = data.records ?? [];
       const recordByMemberId = new Map(loadedRecords.map((record) => [record.memberId, record]));
-      const nextEntries: Record<string, { status: EntryStatus; note: string }> = {};
+      const nextEntries: Record<string, EntryStatus> = {};
       for (const member of data.members as MemberRow[]) {
         const record = recordByMemberId.get(member.id);
-        nextEntries[member.id] = {
-          status: record ? record.status : "NONE",
-          note: record?.note ?? "",
-        };
+        nextEntries[member.id] = record ? record.status : "NONE";
       }
       setMembers(data.members ?? []);
       setRecords(loadedRecords);
@@ -113,7 +109,7 @@ export default function AdminSundayAttendancePage() {
       if (approvedSet.has(member.id)) continue;
       const record = recordByMemberId.get(member.id);
       const locked = record && record.settlementStatus !== "UNSETTLED";
-      const status = locked ? record!.status : entries[member.id]?.status ?? "NONE";
+      const status = locked ? record!.status : entries[member.id] ?? "NONE";
       if (status === "LATE") {
         lateCount += 1;
         totalAmount += locked ? record!.calculatedAmount : policy.sundayLateAmount;
@@ -125,11 +121,8 @@ export default function AdminSundayAttendancePage() {
     return { lateCount, absentCount, totalAmount };
   }, [members, entries, approvedSet, recordByMemberId, policy]);
 
-  function updateEntry(memberId: string, patch: Partial<{ status: EntryStatus; note: string }>) {
-    setEntries((previous) => ({
-      ...previous,
-      [memberId]: { ...(previous[memberId] ?? { status: "NONE", note: "" }), ...patch },
-    }));
+  function updateEntry(memberId: string, status: EntryStatus) {
+    setEntries((previous) => ({ ...previous, [memberId]: status }));
   }
 
   async function handleSave() {
@@ -146,8 +139,7 @@ export default function AdminSundayAttendancePage() {
         })
         .map((member) => ({
           memberId: member.id,
-          status: entries[member.id]?.status ?? "NONE",
-          note: entries[member.id]?.note || undefined,
+          status: entries[member.id] ?? "NONE",
         }));
 
       if (payloadEntries.length === 0) {
@@ -246,8 +238,7 @@ export default function AdminSundayAttendancePage() {
                     const hasApprovedExcuse = approvedSet.has(member.id);
                     const isLocked = Boolean(record && record.settlementStatus !== "UNSETTLED");
                     const disabled = hasApprovedExcuse || isLocked;
-                    const entry = entries[member.id] ?? { status: "NONE" as EntryStatus, note: "" };
-                    const showNote = !disabled && entry.status !== "NONE";
+                    const entryStatus = entries[member.id] ?? "NONE";
 
                     return (
                       <li
@@ -258,20 +249,10 @@ export default function AdminSundayAttendancePage() {
                         )}
                       >
                         <div className="sm:flex sm:items-center sm:gap-4">
-                          <div className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:justify-start">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold">{member.name}</p>
-                              {member.part && (
-                                <p className="truncate text-xs text-muted-foreground">{member.part}</p>
-                              )}
-                            </div>
-                            {hasApprovedExcuse && (
-                              <Badge variant="success" className="shrink-0">사유 승인</Badge>
-                            )}
-                            {!hasApprovedExcuse && isLocked && (
-                              <Badge variant="warning" className="shrink-0">
-                                {RECORD_SETTLEMENT_STATUS_LABELS[record!.settlementStatus]}
-                              </Badge>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold">{member.name}</p>
+                            {member.part && (
+                              <p className="truncate text-xs text-muted-foreground">{member.part}</p>
                             )}
                           </div>
 
@@ -281,14 +262,14 @@ export default function AdminSundayAttendancePage() {
                             className="mt-3 grid grid-cols-3 gap-2 sm:mt-0 sm:w-64 sm:shrink-0"
                           >
                             {STATUS_OPTIONS.map((option) => {
-                              const selected = entry.status === option.value;
+                              const selected = entryStatus === option.value;
                               return (
                                 <button
                                   key={option.value}
                                   type="button"
                                   aria-pressed={selected}
                                   disabled={disabled}
-                                  onClick={() => updateEntry(member.id, { status: option.value })}
+                                  onClick={() => updateEntry(member.id, option.value)}
                                   className={cn(
                                     "h-11 rounded-md border text-sm font-medium transition-colors",
                                     selected
@@ -303,21 +284,11 @@ export default function AdminSundayAttendancePage() {
                             })}
                           </div>
 
-                          {showNote && (
-                            <Input
-                              className="mt-2 h-11 sm:mt-0 sm:w-48 sm:shrink-0"
-                              placeholder="메모 (선택)"
-                              value={entry.note}
-                              onChange={(event) => updateEntry(member.id, { note: event.target.value })}
-                            />
-                          )}
                         </div>
 
                         {disabled && (
                           <p className="mt-2 text-xs text-muted-foreground">
-                            {hasApprovedExcuse
-                              ? `승인된 사유가 있어 ${formatKrw(0)}으로 처리됩니다.`
-                              : "정산에 포함된 기록이라 수정할 수 없습니다."}
+                            {hasApprovedExcuse ? "사유 승인" : "정산 확정"} · 수정할 수 없습니다.
                           </p>
                         )}
                       </li>
