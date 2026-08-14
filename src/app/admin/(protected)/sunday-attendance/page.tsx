@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RECORD_SETTLEMENT_STATUS_LABELS, formatKrw } from "@/lib/labels";
 import { formatDbDate, getDayOfWeekFromDateKey, getSeoulDateKey } from "@/lib/seoul-time";
 import { cn } from "@/lib/utils";
@@ -28,10 +27,10 @@ type SaveResult = {
   skipped: { memberId: string; name: string | null; reason: string }[];
 };
 
-const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
-  { value: "NONE", label: "정상" },
-  { value: "LATE", label: "지각" },
-  { value: "ABSENT", label: "결석" },
+const STATUS_OPTIONS: { value: EntryStatus; label: string; activeClassName: string }[] = [
+  { value: "NONE", label: "정상", activeClassName: "border-emerald-600 bg-emerald-600 text-white" },
+  { value: "LATE", label: "지각", activeClassName: "border-amber-500 bg-amber-500 text-white" },
+  { value: "ABSENT", label: "결석", activeClassName: "border-red-600 bg-red-600 text-white" },
 ];
 
 /** 서울 기준 오늘 이전(오늘 포함) 가장 가까운 일요일 날짜 키 */
@@ -176,26 +175,31 @@ export default function AdminSundayAttendancePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">일요일 출결 체크</h1>
+    <div className="space-y-5">
+      <h1 className="text-xl font-bold sm:text-2xl">일요일 출결 체크</h1>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">날짜 선택</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="space-y-1">
+            <div className="flex-1 space-y-1 sm:flex-none">
               <Label htmlFor="sunday-date">일요일 날짜</Label>
               <Input
                 id="sunday-date"
                 type="date"
-                className="sm:w-48"
+                className="h-11 w-full sm:w-48"
                 value={dateKey}
                 onChange={(event) => setDateKey(event.target.value)}
               />
             </div>
-            <Button type="button" onClick={() => loadData(dateKey)} disabled={!isSunday || loading}>
+            <Button
+              type="button"
+              className="h-11 w-full sm:w-auto"
+              onClick={() => loadData(dateKey)}
+              disabled={!isSunday || loading}
+            >
               {loading ? "불러오는 중..." : "불러오기"}
             </Button>
           </div>
@@ -225,106 +229,126 @@ export default function AdminSundayAttendancePage() {
       )}
 
       {loadedDateKey && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {formatDbDate(new Date(`${loadedDateKey}T00:00:00.000Z`))} 현역 팀원 출결
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {members.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">현역 팀원이 없습니다.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>이름</TableHead>
-                    <TableHead>파트</TableHead>
-                    <TableHead>출결</TableHead>
-                    <TableHead>메모</TableHead>
-                    <TableHead>비고</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+        <>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {formatDbDate(new Date(`${loadedDateKey}T00:00:00.000Z`))} 현역 팀원 출결
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {members.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">현역 팀원이 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
                   {members.map((member) => {
                     const record = recordByMemberId.get(member.id);
                     const hasApprovedExcuse = approvedSet.has(member.id);
                     const isLocked = Boolean(record && record.settlementStatus !== "UNSETTLED");
                     const disabled = hasApprovedExcuse || isLocked;
                     const entry = entries[member.id] ?? { status: "NONE" as EntryStatus, note: "" };
+                    const showNote = !disabled && entry.status !== "NONE";
 
                     return (
-                      <TableRow key={member.id} className={cn(disabled && "bg-muted/40")}>
-                        <TableCell className="font-medium">{member.name}</TableCell>
-                        <TableCell>{member.part ?? "-"}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-3">
-                            {STATUS_OPTIONS.map((option) => (
-                              <label
-                                key={option.value}
-                                className={cn(
-                                  "flex items-center gap-1 text-sm",
-                                  disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-                                )}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`status-${member.id}`}
-                                  className="accent-primary"
-                                  checked={entry.status === option.value}
-                                  disabled={disabled}
-                                  onChange={() => updateEntry(member.id, { status: option.value })}
-                                />
-                                {option.label}
-                              </label>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            className="h-9 min-w-32"
-                            placeholder="메모"
-                            value={entry.note}
-                            disabled={disabled}
-                            onChange={(event) => updateEntry(member.id, { note: event.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {hasApprovedExcuse ? (
-                            <span className="flex items-center gap-2">
-                              <Badge variant="success">사유 승인</Badge>
-                              <span className="text-sm text-muted-foreground">{formatKrw(0)}</span>
-                            </span>
-                          ) : isLocked ? (
-                            <span className="flex items-center gap-2">
-                              <Badge variant="warning">
+                      <li
+                        key={member.id}
+                        className={cn(
+                          "rounded-lg border p-3",
+                          disabled && "bg-muted/40",
+                        )}
+                      >
+                        <div className="sm:flex sm:items-center sm:gap-4">
+                          <div className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:justify-start">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold">{member.name}</p>
+                              {member.part && (
+                                <p className="truncate text-xs text-muted-foreground">{member.part}</p>
+                              )}
+                            </div>
+                            {hasApprovedExcuse && (
+                              <Badge variant="success" className="shrink-0">사유 승인</Badge>
+                            )}
+                            {!hasApprovedExcuse && isLocked && (
+                              <Badge variant="warning" className="shrink-0">
                                 {RECORD_SETTLEMENT_STATUS_LABELS[record!.settlementStatus]}
                               </Badge>
-                              <span className="text-sm text-muted-foreground">수정 불가</span>
-                            </span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </div>
+
+                          <div
+                            role="group"
+                            aria-label={`${member.name} 출결 상태`}
+                            className="mt-3 grid grid-cols-3 gap-2 sm:mt-0 sm:w-64 sm:shrink-0"
+                          >
+                            {STATUS_OPTIONS.map((option) => {
+                              const selected = entry.status === option.value;
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  aria-pressed={selected}
+                                  disabled={disabled}
+                                  onClick={() => updateEntry(member.id, { status: option.value })}
+                                  className={cn(
+                                    "h-11 rounded-md border text-sm font-medium transition-colors",
+                                    selected
+                                      ? option.activeClassName
+                                      : "border-input bg-background text-muted-foreground hover:bg-accent",
+                                    disabled && "cursor-not-allowed opacity-50 hover:bg-background",
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {showNote && (
+                            <Input
+                              className="mt-2 h-11 sm:mt-0 sm:w-48 sm:shrink-0"
+                              placeholder="메모 (선택)"
+                              value={entry.note}
+                              onChange={(event) => updateEntry(member.id, { note: event.target.value })}
+                            />
                           )}
-                        </TableCell>
-                      </TableRow>
+                        </div>
+
+                        {disabled && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {hasApprovedExcuse
+                              ? `승인된 사유가 있어 ${formatKrw(0)}으로 처리됩니다.`
+                              : "정산에 포함된 기록이라 수정할 수 없습니다."}
+                          </p>
+                        )}
+                      </li>
                     );
                   })}
-                </TableBody>
-              </Table>
-            )}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-            <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm">
-                지각 <span className="font-semibold">{summary.lateCount}명</span> · 결석{" "}
-                <span className="font-semibold">{summary.absentCount}명</span> · 예상 금액 합계{" "}
-                <span className="font-semibold">{formatKrw(summary.totalAmount)}</span>
-              </p>
-              <Button type="button" onClick={handleSave} disabled={saving || members.length === 0}>
+          {/* 모바일에서 명단이 길어도 저장 버튼이 항상 보이도록 하단 고정 */}
+          <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:-mx-8 md:px-8">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 text-sm leading-tight">
+                <p>
+                  지각 <span className="font-semibold">{summary.lateCount}명</span> · 결석{" "}
+                  <span className="font-semibold">{summary.absentCount}명</span>
+                </p>
+                <p className="text-muted-foreground">예상 합계 {formatKrw(summary.totalAmount)}</p>
+              </div>
+              <Button
+                type="button"
+                className="h-11 shrink-0 px-6"
+                onClick={handleSave}
+                disabled={saving || members.length === 0}
+              >
                 {saving ? "저장 중..." : "일괄 저장"}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </>
       )}
     </div>
   );
