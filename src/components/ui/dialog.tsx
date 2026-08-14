@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 
 import { cn } from "@/lib/utils"
 
@@ -19,8 +20,16 @@ export interface DialogProps {
  * - ESC / 배경 클릭으로 닫힘
  * - 열린 동안 body 스크롤 잠금
  * - role="dialog" aria-modal
+ * - document.body로 포털 렌더링: 부모의 space-y-*(자식에 margin-top 부여)나
+ *   transform/filter가 fixed 오버레이의 위치·크기를 흔들지 않도록 한다.
  */
 function Dialog({ open, onClose, title, description, children, className }: DialogProps) {
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   React.useEffect(() => {
     if (!open) return
 
@@ -38,11 +47,11 @@ function Dialog({ open, onClose, title, description, children, className }: Dial
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || !mounted) return null
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 m-0 flex items-center justify-center bg-black/50 p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -69,7 +78,8 @@ function Dialog({ open, onClose, title, description, children, className }: Dial
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
