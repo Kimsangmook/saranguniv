@@ -12,6 +12,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/admin/excuse-requests", label: "사유 승인" },
   { href: "/admin/settlements", label: "정산" },
   { href: "/admin/settings", label: "설정" },
+  { href: "/admin/qr", label: "QR 인쇄" },
 ] as const;
 
 export function AdminSidebar() {
