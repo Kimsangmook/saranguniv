@@ -3,7 +3,7 @@ import { AttendanceStatus, MemberStatus, MeetingType, Prisma, RecordMethod } fro
 import { getActivePolicy } from "@/lib/policy";
 import { prisma } from "@/lib/prisma";
 import { getSeoulAttendanceDate, getSeoulTimeLabel } from "@/lib/seoul-time";
-import { calculateWithRates, getStandardTimeForDate } from "@/lib/settlement";
+import { calculateWithRates, getStandardTimeForDate, minutesToTimeLabel } from "@/lib/settlement";
 
 function toRecordResponse(created: boolean, memberName: string, record: { status: AttendanceStatus; arrivedAt: Date | null; lateMinutes: number | null; calculatedAmount: number }) {
   return {
@@ -54,7 +54,12 @@ export async function POST(request: Request) {
   const lateMinutes = Math.max(0, Math.floor((arrivedAt.getTime() - standardTime.getTime()) / 60_000));
 
   if (lateMinutes <= 0) {
-    return NextResponse.json({ error: "지각 기록은 모임 시작 시각 이후에만 남길 수 있습니다." }, { status: 422 });
+    return NextResponse.json(
+      {
+        error: `지각 기록은 모임 시작 시각(${minutesToTimeLabel(policy.saturdayStartMinutes)}) 이후에만 남길 수 있습니다. 모임 시작 시각이 다른 날이라면 관리자에게 기준 시각 변경을 요청해주세요.`,
+      },
+      { status: 422 },
+    );
   }
 
   const uniqueWhere = {

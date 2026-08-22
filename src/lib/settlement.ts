@@ -133,13 +133,23 @@ export type SettlementSourceRecord = {
   meetingType: MeetingType;
   status: AttendanceStatus;
   settlementStatus: RecordSettlementStatus;
+  /** 기록에 저장된 기준 시각. 있으면 정산 시 이 값을 우선 적용한다 (row별 기준 시각). */
+  standardTime: Date | null;
   arrivedAt: Date | null;
   lateMinutes: number | null;
   member: { id: string; name: string };
 };
 
 export type SettlementCalculationDetail =
-  | { base: "saturday"; lateMinutes: number; amountPerMinute: number }
+  | {
+      base: "saturday";
+      lateMinutes: number;
+      amountPerMinute: number;
+      /** 실제 적용된 기준 시각 "HH:MM" (서울) */
+      standardTimeLabel?: string;
+      /** 기록 자체의 기준 시각을 썼으면 "record", 정산 규칙 기본값을 썼으면 "rules" */
+      standardTimeSource?: "record" | "rules";
+    }
   | { base: "sunday"; status: AttendanceStatus };
 
 export type ComputedSettlementItem = {
@@ -169,7 +179,9 @@ export type SettlementComputation = {
 
 /**
  * 선택된 출결 기록을 규칙(rules) 기준으로 전부 재계산한다.
- * - 토요일 LATE: arrivedAt과 rules.saturdayStartMinutes로 지각 분을 재산출해 구간 요율 적용
+ * - 토요일 LATE: 기준 시각은 row별로 record.standardTime을 우선 적용하고,
+ *   없을 때만 rules.saturdayStartMinutes(기본 기준 시각)로 계산한다.
+ *   arrivedAt이 있으면 (도착 시각 - 기준 시각)으로 지각 분을 재산출해 구간 요율 적용.
  * - 일요일: LATE=sundayLateAmount, ABSENT=sundayAbsentAmount
  */
 export function computeSettlementItems(
@@ -184,9 +196,14 @@ export function computeSettlementItems(
     let detail: SettlementCalculationDetail;
 
     if (record.meetingType === "SATURDAY") {
+      // row별 기준 시각: 기록에 저장된 값 우선, 없으면 규칙의 기본 기준 시각
+      const standard =
+        record.standardTime ??
+        getStandardTimeForDate(record.attendanceDate, rules.saturdayStartMinutes);
+      const standardTimeSource: "record" | "rules" = record.standardTime ? "record" : "rules";
+
       let lateMinutes: number;
       if (record.arrivedAt) {
-        const standard = getStandardTimeForDate(record.attendanceDate, rules.saturdayStartMinutes);
         lateMinutes = Math.max(
           0,
           Math.floor((record.arrivedAt.getTime() - standard.getTime()) / 60_000),
@@ -197,7 +214,13 @@ export function computeSettlementItems(
       const amountPerMinute =
         lateMinutes > 0 ? findRate(lateMinutes, rules.saturdayRates).amountPerMinute : 0;
       amount = calculateWithRates(lateMinutes, rules.saturdayRates);
-      detail = { base: "saturday", lateMinutes, amountPerMinute };
+      detail = {
+        base: "saturday",
+        lateMinutes,
+        amountPerMinute,
+        standardTimeLabel: formatSeoulHourMinute(standard),
+        standardTimeSource,
+      };
     } else {
       amount = record.status === "ABSENT" ? rules.sundayAbsentAmount : rules.sundayLateAmount;
       detail = { base: "sunday", status: record.status };

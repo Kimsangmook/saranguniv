@@ -205,6 +205,7 @@ export default function LateRecordsPage() {
   // -------------------------------------------------------------------------
   const [editTarget, setEditTarget] = React.useState<RecordRow | null>(null);
   const [editArrivedAt, setEditArrivedAt] = React.useState("");
+  const [editStandardTime, setEditStandardTime] = React.useState("");
   const [editStatus, setEditStatus] = React.useState<"LATE" | "ABSENT">("LATE");
   const [editNote, setEditNote] = React.useState("");
   const [editReason, setEditReason] = React.useState("");
@@ -214,6 +215,7 @@ export default function LateRecordsPage() {
   const openEdit = (record: RecordRow) => {
     setEditTarget(record);
     setEditArrivedAt(isoToDatetimeLocal(record.arrivedAt));
+    setEditStandardTime(record.standardTime ? seoulHm(record.standardTime) : "");
     setEditStatus(record.status);
     setEditNote(record.note ?? "");
     setEditReason("");
@@ -242,6 +244,14 @@ export default function LateRecordsPage() {
           return;
         }
         body.arrivedAt = iso;
+      }
+      if (editTarget.meetingType === "SATURDAY" && editStandardTime) {
+        if (timeLabelToMinutes(editStandardTime) === null) {
+          setEditError("기준 시각이 올바르지 않습니다.");
+          setEditSubmitting(false);
+          return;
+        }
+        body.standardTime = editStandardTime;
       }
       const res = await fetch(`/api/admin/late-records/${editTarget.id}`, {
         method: "PATCH",
@@ -706,6 +716,22 @@ export default function LateRecordsPage() {
       >
         {editTarget && (
           <div className="space-y-4">
+            {editTarget.meetingType === "SATURDAY" && (
+              <div className="space-y-1">
+                <Label htmlFor="edit-standard">기준 시각 (이 기록에만 적용)</Label>
+                <Input
+                  id="edit-standard"
+                  type="time"
+                  value={editStandardTime}
+                  onChange={(e) => setEditStandardTime(e.target.value)}
+                  className="w-40"
+                />
+                <p className="text-xs text-muted-foreground">
+                  모임 시작이 평소와 달랐던 날(예: 09:30)은 여기서 이 기록의 기준 시각을 바꿔주세요.
+                  정산 시에도 이 값이 우선 적용됩니다.
+                </p>
+              </div>
+            )}
             <div className="space-y-1">
               <Label htmlFor="edit-arrived">도착 시각</Label>
               <Input
@@ -716,7 +742,7 @@ export default function LateRecordsPage() {
               />
               {editTarget.meetingType === "SATURDAY" && (
                 <p className="text-xs text-muted-foreground">
-                  토요일 기록은 도착 시각 변경 시 지각 분과 금액이 서버에서 재계산됩니다.
+                  토요일 기록은 도착·기준 시각 변경 시 지각 분과 금액이 서버에서 재계산됩니다.
                 </p>
               )}
             </div>
@@ -844,7 +870,7 @@ export default function LateRecordsPage() {
           <div className="space-y-3 rounded-md border p-4">
             <p className="text-sm font-semibold">적용 규칙 (확정 전까지만 수정 가능)</p>
             <div className="space-y-1">
-              <Label htmlFor="rule-start">토요일 기준 시각</Label>
+              <Label htmlFor="rule-start">토요일 기본 기준 시각</Label>
               <Input
                 id="rule-start"
                 type="time"
@@ -855,6 +881,10 @@ export default function LateRecordsPage() {
                 }}
                 className="w-40"
               />
+              <p className="text-xs text-muted-foreground">
+                기록에 저장된 기준 시각(표의 &quot;기준 시각&quot; 열)이 있으면 그 값이 기록별로 우선
+                적용되고, 없는 기록에만 이 기본값이 적용됩니다.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>토요일 과금 구간 (구간 상한 분 · 분당 금액)</Label>

@@ -262,8 +262,11 @@ export default function SettlementDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">토요일 기준 시각</span>
-              <span>{minutesToTimeLabel(rules.saturdayStartMinutes)}</span>
+              <span className="text-muted-foreground">토요일 기본 기준 시각</span>
+              <span>
+                {minutesToTimeLabel(rules.saturdayStartMinutes)}
+                <span className="ml-1 text-xs text-muted-foreground">(기록별 기준 시각 우선)</span>
+              </span>
             </div>
             {rules.saturdayRates.map((rate, index) => (
               <div key={index} className="flex justify-between">

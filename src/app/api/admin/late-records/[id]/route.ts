@@ -29,10 +29,19 @@ function serializeRecord(record: AttendanceRecord): Prisma.InputJsonValue {
 
 class ConflictError extends Error {}
 
+/** "HH:MM" → 자정 기준 분. 형식이 올바르지 않으면 null */
+function timeLabelToMinutes(label: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(label.trim());
+  if (!match) return null;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  return minutes >= 0 && minutes < 24 * 60 ? minutes : null;
+}
+
 /**
  * 출결 기록 수정 (미정산 기록만)
  * PATCH /api/admin/late-records/[id]
- * body: { arrivedAt?(ISO), status?, note?, reason(필수) }
+ * body: { arrivedAt?(ISO), standardTime?("HH:MM", 토요일 전용), status?, note?, reason(필수) }
+ * 토요일 기록은 도착·기준 시각 변경 시 해당 기록(row)의 기준 시각으로 지각 분·금액을 재계산한다.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminApi();
@@ -81,7 +90,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.status = nextStatus;
   }
 
+  // 기준 시각 변경 (토요일 전용, "HH:MM" 서울 기준 → 기록 날짜의 timestamp로 저장)
+  let nextStandardTime = record.standardTime;
+  let standardTimeChanged = false;
+  if (body.standardTime !== undefined) {
+    if (record.meetingType !== MeetingType.SATURDAY) {
+      return NextResponse.json(
+        { message: "기준 시각은 토요일 기록에서만 수정할 수 있습니다." },
+        { status: 400 },
+      );
+    }
+    if (typeof body.standardTime !== "string") {
+      return NextResponse.json({ message: "기준 시각이 올바르지 않습니다." }, { status: 400 });
+    }
+    const minutes = timeLabelToMinutes(body.standardTime);
+    if (minutes === null) {
+      return NextResponse.json(
+        { message: "기준 시각은 HH:MM 형식으로 입력해주세요." },
+        { status: 400 },
+      );
+    }
+    nextStandardTime = getStandardTimeForDate(record.attendanceDate, minutes);
+    standardTimeChanged =
+      record.standardTime === null ||
+      nextStandardTime.getTime() !== record.standardTime.getTime();
+  }
+
   // 도착 시각 변경
+  let nextArrivedAt = record.arrivedAt;
+  let arrivedAtChanged = false;
   if (body.arrivedAt !== undefined) {
     if (typeof body.arrivedAt !== "string") {
       return NextResponse.json({ message: "도착 시각이 올바르지 않습니다." }, { status: 400 });
@@ -99,25 +136,43 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         { status: 400 },
       );
     }
+    nextArrivedAt = arrivedAt;
+    arrivedAtChanged = true;
+  }
 
-    if (record.meetingType === MeetingType.SATURDAY) {
-      // 토요일: 활성 정책의 기준 시각·요율로 지각 분·금액 서버 재계산
+  if (record.meetingType === MeetingType.SATURDAY) {
+    if (arrivedAtChanged || standardTimeChanged) {
+      // 토요일: 이 기록(row)의 기준 시각으로 지각 분·금액 서버 재계산
+      // (기준 시각이 저장돼 있지 않은 과거 기록은 활성 정책의 기준 시각으로 보완)
       const policy = await getActivePolicy();
-      const standardTime = getStandardTimeForDate(
-        record.attendanceDate,
-        policy.saturdayStartMinutes,
+      const standardTime =
+        nextStandardTime ??
+        getStandardTimeForDate(record.attendanceDate, policy.saturdayStartMinutes);
+      if (!nextArrivedAt) {
+        return NextResponse.json(
+          { message: "도착 시각이 없는 토요일 기록은 기준 시각을 재계산할 수 없습니다." },
+          { status: 400 },
+        );
+      }
+      const lateMinutes = Math.floor(
+        (nextArrivedAt.getTime() - standardTime.getTime()) / 60_000,
       );
-      const lateMinutes = Math.max(
-        0,
-        Math.floor((arrivedAt.getTime() - standardTime.getTime()) / 60_000),
-      );
-      data.arrivedAt = arrivedAt;
+      if (lateMinutes <= 0) {
+        return NextResponse.json(
+          {
+            message:
+              "도착 시각이 기준 시각보다 빠르거나 같아 지각이 아닙니다. 지각이 아니라면 기록을 무효화해주세요.",
+          },
+          { status: 400 },
+        );
+      }
+      data.arrivedAt = nextArrivedAt;
       data.standardTime = standardTime;
       data.lateMinutes = lateMinutes;
       data.calculatedAmount = calculateWithRates(lateMinutes, policy.saturdayRates);
-    } else {
-      data.arrivedAt = arrivedAt;
     }
+  } else if (arrivedAtChanged) {
+    data.arrivedAt = nextArrivedAt;
   }
 
   // 일요일: 상태 변경 시 활성 정책 금액으로 재계산

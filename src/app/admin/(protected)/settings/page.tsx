@@ -275,6 +275,11 @@ export default function AdminSettingsPage() {
             <p className="text-xs text-muted-foreground">
               예: 10:30 — 10:30까지 도착하면 지각비가 없습니다.
             </p>
+            <p className="text-xs text-muted-foreground">
+              모임 시작이 하루만 다른 날(예: 09:30)은 모임 전에 이 값을 바꿨다가 끝난 뒤 되돌리면
+              됩니다. 각 기록에는 기록 시점의 기준 시각이 저장되며, 정산에서도 기록별 기준 시각이
+              우선 적용됩니다. 이미 저장된 기록은 통합 출결 기록에서 개별 수정할 수 있습니다.
+            </p>
           </div>
 
           <div className="space-y-3">
